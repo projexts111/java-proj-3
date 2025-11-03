@@ -10,7 +10,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.net.URISyntaxException; // <-- CRITICAL FIX: Ensure this import exists
+import java.net.URISyntaxException; // Keep this import for the catch block
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -22,7 +22,7 @@ public class GeneratorController extends HttpServlet {
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) 
-        throws ServletException, IOException, URISyntaxException { // <-- CRITICAL FIX: Added URISyntaxException here
+        throws ServletException, IOException { // <-- CORRECTED: Signature must match HttpServlet
         
         String[] namesArray = request.getParameterValues("participantName");
         
@@ -37,11 +37,12 @@ public class GeneratorController extends HttpServlet {
         List<String> participants = List.of(namesArray);
         List<MatchResult> matches;
         
+        // All code paths that throw checked exceptions (URISyntaxException, SQLException) 
+        // must be contained within this try block.
         try {
             matches = generateMatches(participants);
             
-            // This call to saveMatches now throws URISyntaxException, but it is handled by 
-            // the method signature and the catch block below.
+            // This is the call that throws URISyntaxException and SQLException
             appDAO.saveMatches(1, matches); 
 
             // SUCCESS: Inform the user matches are stored, awaiting secure reveal link generation/distribution
@@ -56,9 +57,11 @@ public class GeneratorController extends HttpServlet {
             // Catches DB connection/transaction errors
             request.setAttribute("error", "A database error occurred during saving: " + e.getMessage());
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
+        } catch (URISyntaxException e) { // <-- CRITICAL FIX: Explicitly catching the exception here!
+             // Catches the error if the DATABASE_URL format is invalid
+            request.setAttribute("error", "Configuration Error: The DATABASE_URL format is invalid. Check the environment variable format.");
+            request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
         }
-        // Note: URISyntaxException is now covered by the method signature, but catching it explicitly is also good practice
-        // We rely on the signature in this final version to keep the catch blocks focused on operational errors.
     }
 
     /**
