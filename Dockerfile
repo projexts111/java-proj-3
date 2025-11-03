@@ -7,7 +7,7 @@ RUN mvn dependency:go-offline
 
 # 2. Copy source code and build the application
 COPY src ./src
-RUN mvn package -DskipTests  <-- THIS CREATES /app/target/secretsanta.war
+RUN mvn package -DskipTests  # <-- FIX: Comment removed! This creates secretsanta.war
 
 # Stage 2: Runtime Stage
 FROM tomcat:9.0-jdk11-openjdk-slim
@@ -17,7 +17,7 @@ USER tomcat
 # 3. Copy the entrypoint script
 COPY entrypoint.sh /usr/local/tomcat/bin/
 
-# 4. Copy the WAR file from the build stage (THIS IS WHERE YOUR ERROR OCCURRED)
+# 4. Copy the WAR file from the build stage (This step will now succeed)
 COPY --from=build /app/target/secretsanta.war /usr/local/tomcat/webapps/
 
 # 5. Grant execution rights and set entrypoint
