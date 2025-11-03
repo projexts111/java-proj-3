@@ -1,23 +1,28 @@
 # Stage 1: Build Stage
 FROM maven:3.8.1-jdk-11 AS build
-# ... (rest of build stage remains the same) ...
+WORKDIR /app
+# 1. Copy pom and download dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
+# 2. Copy source code and build the application
+COPY src ./src
+RUN mvn package -DskipTests  <-- THIS CREATES /app/target/secretsanta.war
 
 # Stage 2: Runtime Stage
 FROM tomcat:9.0-jdk11-openjdk-slim
 
 USER tomcat
 
-# Copy the entrypoint script and the built WAR
+# 3. Copy the entrypoint script
 COPY entrypoint.sh /usr/local/tomcat/bin/
+
+# 4. Copy the WAR file from the build stage (THIS IS WHERE YOUR ERROR OCCURRED)
 COPY --from=build /app/target/secretsanta.war /usr/local/tomcat/webapps/
 
-# Grant execution rights
+# 5. Grant execution rights and set entrypoint
 RUN chmod +x /usr/local/tomcat/bin/entrypoint.sh
-
-# Change the entrypoint to run our script instead of the default Tomcat command
 ENTRYPOINT ["/usr/local/tomcat/bin/entrypoint.sh"]
 
 EXPOSE 8080
-
-# CMD is now just passed as an argument to the ENTRYPOINT
 CMD [""]
