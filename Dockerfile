@@ -9,10 +9,11 @@ RUN mvn package -DskipTests
 
 # Stage 2: Runtime Stage
 FROM tomcat:9.0-jdk11-openjdk-slim
-# CRITICAL: Fix permissions and deployment location
-# Ensures Tomcat runs correctly in the container
-RUN chown -R tomcat:tomcat /usr/local/tomcat
-USER tomcat
+# CRITICAL FIX: The 'tomcat' user/group does not exist in the slim image's chown database.
+# The base Tomcat image already manages the necessary directory permissions for the 'tomcat' user.
+# We only need to switch the user.
+
+USER tomcat  # <-- This line is correct and switches the context to the tomcat user
 
 # Copy the built WAR from the build stage to Tomcat's webapps directory
 COPY --from=build /app/target/secretsanta.war /usr/local/tomcat/webapps/
