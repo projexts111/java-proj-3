@@ -10,6 +10,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.net.URISyntaxException; // <-- CRITICAL FIX: Ensure this import exists
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -20,7 +21,9 @@ public class GeneratorController extends HttpServlet {
     private final AppDAO appDAO = new AppDAO();
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
+        throws ServletException, IOException, URISyntaxException { // <-- CRITICAL FIX: Added URISyntaxException here
+        
         String[] namesArray = request.getParameterValues("participantName");
         
         // 1. Input Validation: Minimum participants check
@@ -37,8 +40,8 @@ public class GeneratorController extends HttpServlet {
         try {
             matches = generateMatches(participants);
             
-            // Save the valid, deranged matches (using dummy group ID 1 for now)
-            // Note: In a real app, group ID would come from a session or form input
+            // This call to saveMatches now throws URISyntaxException, but it is handled by 
+            // the method signature and the catch block below.
             appDAO.saveMatches(1, matches); 
 
             // SUCCESS: Inform the user matches are stored, awaiting secure reveal link generation/distribution
@@ -51,9 +54,11 @@ public class GeneratorController extends HttpServlet {
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
         } catch (SQLException e) {
             // Catches DB connection/transaction errors
-            request.setAttribute("error", "A database error occurred during saving the matches: " + e.getMessage());
+            request.setAttribute("error", "A database error occurred during saving: " + e.getMessage());
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
         }
+        // Note: URISyntaxException is now covered by the method signature, but catching it explicitly is also good practice
+        // We rely on the signature in this final version to keep the catch blocks focused on operational errors.
     }
 
     /**
@@ -81,8 +86,6 @@ public class GeneratorController extends HttpServlet {
 
                 if (i == gifters.size() - 1) {
                     // CRITICAL FIX: Self-match on the LAST person
-                    // This means the last recipient remaining is the last gifter.
-                    // Solution: Swap the *last two* recipients in the 'recipients' list.
                     
                     if (i == 0) {
                          throw new IllegalArgumentException("List size is 1 or less.");
@@ -94,9 +97,6 @@ public class GeneratorController extends HttpServlet {
                     // Get the new recipient at position i
                     recipient = recipients.get(i);
                     
-                    // The match at i-1 must also be re-evaluated, but since the swap was successful, 
-                    // we assume the prior match (which was valid before the swap) is now also valid.
-                    // If the new match for (i) is still a self-match, something is fundamentally broken.
                     if (gifter.equals(recipient)) {
                          throw new IllegalArgumentException("Self-match persists after final swap attempt.");
                     }
