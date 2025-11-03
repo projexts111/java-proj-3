@@ -1,25 +1,23 @@
 # Stage 1: Build Stage
 FROM maven:3.8.1-jdk-11 AS build
-WORKDIR /app
-COPY pom.xml .
-RUN mvn dependency:go-offline
-COPY src ./src
-# Build the WAR file
-RUN mvn package -DskipTests
+# ... (rest of build stage remains the same) ...
 
 # Stage 2: Runtime Stage
 FROM tomcat:9.0-jdk11-openjdk-slim
-# CRITICAL FIX: The 'tomcat' user/group does not exist in the slim image's chown database.
-# The base Tomcat image already manages the necessary directory permissions for the 'tomcat' user.
-# We only need to switch the user.
 
-USER tomcat  # <-- This line is correct and switches the context to the tomcat user
+USER tomcat
 
-# Copy the built WAR from the build stage to Tomcat's webapps directory
+# Copy the entrypoint script and the built WAR
+COPY entrypoint.sh /usr/local/tomcat/bin/
 COPY --from=build /app/target/secretsanta.war /usr/local/tomcat/webapps/
 
-# Expose the standard Tomcat port
+# Grant execution rights
+RUN chmod +x /usr/local/tomcat/bin/entrypoint.sh
+
+# Change the entrypoint to run our script instead of the default Tomcat command
+ENTRYPOINT ["/usr/local/tomcat/bin/entrypoint.sh"]
+
 EXPOSE 8080
 
-# The default tomcat entrypoint will run
-CMD ["catalina.sh", "run"]
+# CMD is now just passed as an argument to the ENTRYPOINT
+CMD [""]
