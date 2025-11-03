@@ -11,22 +11,28 @@ import java.util.List;
 
 public class AppDAO {
 
-    // NOTE: getConnection is now correctly declaring both checked exceptions
+    /**
+     * Establishes a connection to the PostgreSQL database.
+     * Includes the CRITICAL FIX for parsing PaaS environment variables (DATABASE_URL)
+     * and ensuring SSL is used for cloud connections.
+     */
     private static Connection getConnection() throws URISyntaxException, SQLException {
         // Look for the connection string in the environment variables
         String dbUrl = System.getenv("DATABASE_URL");
         
         if (dbUrl == null || dbUrl.isEmpty()) {
+            // Placeholder for local testing (WILL FAIL ON RENDER/PaaS)
             System.err.println("DATABASE_URL environment variable is missing. Using local fallback.");
             return DriverManager.getConnection("jdbc:postgresql://localhost:5432/secretsanta", "user", "password");
         }
 
-        // URI constructor throws URISyntaxException - THIS IS THE SOURCE OF THE ERROR
-        URI dbUri = new URI(dbUrl); 
+        // Parse the complex URL format: postgres://user:password@host:port/dbname
+        URI dbUri = new URI(dbUrl);
         String userInfo = dbUri.getUserInfo();
         
         // Handle potential null userInfo (e.g., if URI is incomplete)
         if (userInfo == null) {
+            // Throw URISyntaxException to force failure early if config is bad
             throw new URISyntaxException(dbUrl, "User info (username:password) is missing from the database URL.");
         }
         
@@ -38,6 +44,15 @@ public class AppDAO {
 
         String jdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + dbName;
         
+        // --- CRITICAL SSL FIX: Add the required parameters for PaaS database connections ---
+        // Without this, the application will crash during startup on platforms requiring SSL.
+        if (!jdbcUrl.contains("?")) {
+            jdbcUrl += "?ssl=true&sslmode=require";
+        } else {
+            jdbcUrl += "&ssl=true&sslmode=require";
+        }
+        // ---------------------------------------------------------------------------------
+
         try {
             Class.forName("org.postgresql.Driver");
         } catch (ClassNotFoundException e) {
@@ -48,10 +63,14 @@ public class AppDAO {
         return DriverManager.getConnection(jdbcUrl, username, password);
     }
     
-    // FIX APPLIED HERE: Added 'throws URISyntaxException' to the method signature
+    /**
+     * Saves the list of generated matches to the database in a single transaction.
+     * The method declares the checked exceptions thrown by getConnection().
+     */
     public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException, URISyntaxException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
-        // Since getConnection() is called here, this method must throw the same exceptions.
+        
+        // getConnection() call is placed inside the try-with-resources block.
         try (Connection conn = getConnection();
              java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
