@@ -13,26 +13,28 @@ public class AppDAO {
 
     /**
      * Establishes a connection to the PostgreSQL database.
-     * Includes the CRITICAL FIX for parsing PaaS environment variables (DATABASE_URL)
-     * and ensuring SSL is used for cloud connections.
+     * Includes fixes for PaaS environment variables (DATABASE_URL) and cloud SSL.
      */
     private static Connection getConnection() throws URISyntaxException, SQLException {
         // Look for the connection string in the environment variables
         String dbUrl = System.getenv("DATABASE_URL");
         
         if (dbUrl == null || dbUrl.isEmpty()) {
-            // Placeholder for local testing (WILL FAIL ON RENDER/PaaS)
+            // Fallback for local testing (Will fail on cloud)
             System.err.println("DATABASE_URL environment variable is missing. Using local fallback.");
             return DriverManager.getConnection("jdbc:postgresql://localhost:5432/secretsanta", "user", "password");
         }
 
-        // Parse the complex URL format: postgres://user:password@host:port/dbname
-        URI dbUri = new URI(dbUrl);
+        // --- CRITICAL FIX 1: Normalize the URL scheme for java.net.URI parser ---
+        // Replace the commonly provided "postgresql" scheme with the standard "postgres" scheme.
+        String correctedUrl = dbUrl.replaceFirst("^postgresql://", "postgres://");
+        
+        // Parse the corrected URL
+        URI dbUri = new URI(correctedUrl);
+
         String userInfo = dbUri.getUserInfo();
         
-        // Handle potential null userInfo (e.g., if URI is incomplete)
         if (userInfo == null) {
-            // Throw URISyntaxException to force failure early if config is bad
             throw new URISyntaxException(dbUrl, "User info (username:password) is missing from the database URL.");
         }
         
@@ -44,8 +46,8 @@ public class AppDAO {
 
         String jdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + dbName;
         
-        // --- CRITICAL SSL FIX: Add the required parameters for PaaS database connections ---
-        // Without this, the application will crash during startup on platforms requiring SSL.
+        // --- CRITICAL FIX 2: Add the required SSL parameters for cloud connections ---
+        // Prevents startup crash due to connection security handshake failure.
         if (!jdbcUrl.contains("?")) {
             jdbcUrl += "?ssl=true&sslmode=require";
         } else {
@@ -65,7 +67,7 @@ public class AppDAO {
     
     /**
      * Saves the list of generated matches to the database in a single transaction.
-     * The method declares the checked exceptions thrown by getConnection().
+     * Method declares the checked exceptions thrown by getConnection().
      */
     public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException, URISyntaxException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
