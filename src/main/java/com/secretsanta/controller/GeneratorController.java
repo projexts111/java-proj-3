@@ -10,19 +10,29 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.net.URISyntaxException; // Keep this import for the catch block
+import java.net.URISyntaxException; 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-@WebServlet(name = "GeneratorController", urlPatterns = {"/generate"})
+@WebServlet(name = "GeneratorController", urlPatterns = {"/generate", "/form"}) // <-- UPDATED: Handles /form path
 public class GeneratorController extends HttpServlet {
     private final AppDAO appDAO = new AppDAO();
 
+    // --- FIX: Add doGet to handle the /form endpoint redirect from index.jsp ---
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+        throws ServletException, IOException {
+        
+        // Dispatch securely to the JSP form view
+        request.getRequestDispatcher("/WEB-INF/views/generator-form.jsp").forward(request, response);
+    }
+    // --------------------------------------------------------------------------
+
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) 
-        throws ServletException, IOException { // <-- CORRECTED: Signature must match HttpServlet
+        throws ServletException, IOException { 
         
         String[] namesArray = request.getParameterValues("participantName");
         
@@ -37,12 +47,10 @@ public class GeneratorController extends HttpServlet {
         List<String> participants = List.of(namesArray);
         List<MatchResult> matches;
         
-        // All code paths that throw checked exceptions (URISyntaxException, SQLException) 
-        // must be contained within this try block.
         try {
             matches = generateMatches(participants);
             
-            // This is the call that throws URISyntaxException and SQLException
+            // This call can throw SQLException and URISyntaxException, which are caught below
             appDAO.saveMatches(1, matches); 
 
             // SUCCESS: Inform the user matches are stored, awaiting secure reveal link generation/distribution
@@ -57,7 +65,7 @@ public class GeneratorController extends HttpServlet {
             // Catches DB connection/transaction errors
             request.setAttribute("error", "A database error occurred during saving: " + e.getMessage());
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
-        } catch (URISyntaxException e) { // <-- CRITICAL FIX: Explicitly catching the exception here!
+        } catch (URISyntaxException e) {
              // Catches the error if the DATABASE_URL format is invalid
             request.setAttribute("error", "Configuration Error: The DATABASE_URL format is invalid. Check the environment variable format.");
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
@@ -81,12 +89,11 @@ public class GeneratorController extends HttpServlet {
 
         for (int i = 0; i < gifters.size(); i++) {
             String gifter = gifters.get(i);
-            String recipient = recipients.get(i); // The current tentative recipient
+            String recipient = recipients.get(i); 
 
             // Constraint Check: No Self-Match
             if (gifter.equals(recipient)) {
-                // Self-match occurred! Apply fix strategy.
-
+                
                 if (i == gifters.size() - 1) {
                     // CRITICAL FIX: Self-match on the LAST person
                     
@@ -97,7 +104,6 @@ public class GeneratorController extends HttpServlet {
                     // Swap the last recipient (i) with the previous one (i-1)
                     Collections.swap(recipients, i, i - 1);
                     
-                    // Get the new recipient at position i
                     recipient = recipients.get(i);
                     
                     if (gifter.equals(recipient)) {
@@ -105,17 +111,13 @@ public class GeneratorController extends HttpServlet {
                     }
                 } else {
                     // Simple Fix: Self-match, but NOT the last person.
-                    // Swap the current recipient (i) with a random recipient further down the list (j > i)
                     
-                    // Select a random index j from [i+1, size-1]
                     int swapIndex = i + 1 + random.nextInt(recipients.size() - i - 1);
                     
                     Collections.swap(recipients, i, swapIndex);
                     
-                    // Get the new recipient at position i
                     recipient = recipients.get(i);
                     
-                    // Re-check after swap (should pass)
                     if (gifter.equals(recipient)) {
                         throw new IllegalArgumentException("Self-match persists after simple swap attempt.");
                     }
