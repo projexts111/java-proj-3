@@ -11,20 +11,25 @@ import java.util.List;
 
 public class AppDAO {
 
-    // The CRITICAL FIX for PostgreSQL URLs in PaaS environments (like Render)
+    // NOTE: getConnection is now correctly declaring both checked exceptions
     private static Connection getConnection() throws URISyntaxException, SQLException {
         // Look for the connection string in the environment variables
         String dbUrl = System.getenv("DATABASE_URL");
         
         if (dbUrl == null || dbUrl.isEmpty()) {
-            // Placeholder for local testing (WILL FAIL ON RENDER/PaaS)
             System.err.println("DATABASE_URL environment variable is missing. Using local fallback.");
             return DriverManager.getConnection("jdbc:postgresql://localhost:5432/secretsanta", "user", "password");
         }
 
-        // Parse the complex URL format: postgres://user:password@host:port/dbname
-        URI dbUri = new URI(dbUrl);
+        // URI constructor throws URISyntaxException - THIS IS THE SOURCE OF THE ERROR
+        URI dbUri = new URI(dbUrl); 
         String userInfo = dbUri.getUserInfo();
+        
+        // Handle potential null userInfo (e.g., if URI is incomplete)
+        if (userInfo == null) {
+            throw new URISyntaxException(dbUrl, "User info (username:password) is missing from the database URL.");
+        }
+        
         String username = userInfo.split(":")[0];
         String password = userInfo.split(":")[1];
         String host = dbUri.getHost();
@@ -43,9 +48,10 @@ public class AppDAO {
         return DriverManager.getConnection(jdbcUrl, username, password);
     }
     
-    // Minimal logic to save the results
-    public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException {
+    // FIX APPLIED HERE: Added 'throws URISyntaxException' to the method signature
+    public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException, URISyntaxException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
+        // Since getConnection() is called here, this method must throw the same exceptions.
         try (Connection conn = getConnection();
              java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
