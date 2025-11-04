@@ -11,10 +11,16 @@ import java.util.List;
 
 public class AppDAO {
 
+    /**
+     * Establishes a connection to the PostgreSQL database.
+     * Includes fixes for PaaS environment variables (DATABASE_URL) and cloud SSL.
+     */
     private static Connection getConnection() throws URISyntaxException, SQLException {
+        // Look for the connection string in the environment variables
         String dbUrl = System.getenv("DATABASE_URL");
         
         if (dbUrl == null || dbUrl.isEmpty()) {
+            // Fallback for local testing (WILL FAIL ON CLOUD)
             System.err.println("DATABASE_URL environment variable is missing. Using local fallback.");
             return DriverManager.getConnection("jdbc:postgresql://localhost:5432/secretsanta", "user", "password");
         }
@@ -38,13 +44,13 @@ public class AppDAO {
 
         String jdbcUrl = "jdbc:postgresql://" + host + ":" + port + "/" + dbName;
         
-        // --- CRITICAL FIX 2: Conditionally apply SSL ---
-        // If the host is short (Internal Hostname), skip SSL enforcement.
-        // The specific host 'dpg-d447o914d56c7385ktbg-a' has 28 characters.
+        // --- CRITICAL FIX 2: Conditionally apply SSL based on host type ---
+        // Internal hosts typically fail if forced to use SSL. External hosts require it.
+        // Render's internal hostnames are typically much shorter than external FQDNs.
         boolean isInternalHost = host.length() < 30; 
         
         if (!isInternalHost) {
-            // Only apply SSL fix if connecting externally
+            // Apply SSL fix only if connecting externally (long hostname)
             if (!jdbcUrl.contains("?")) {
                 jdbcUrl += "?ssl=true&sslmode=require";
             } else {
@@ -63,12 +69,18 @@ public class AppDAO {
         return DriverManager.getConnection(jdbcUrl, username, password);
     }
     
+    /**
+     * Saves the list of generated matches to the database in a single transaction.
+     * Method declares the checked exceptions thrown by getConnection().
+     */
     public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException, URISyntaxException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
         
+        // getConnection() call is placed inside the try-with-resources block.
         try (Connection conn = getConnection();
              java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
+            // Begin Transaction - CRITICAL for data integrity
             conn.setAutoCommit(false); 
 
             for (MatchResult match : matches) {
@@ -78,7 +90,7 @@ public class AppDAO {
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
-            conn.commit(); 
+            conn.commit(); // Commit Transaction
         }
     }
 }
