@@ -1,44 +1,34 @@
-# Stage 1: Build Stage
-# Build stage for compiling the Java application
+# Stage 1: Build Stage (No changes needed here)
 FROM maven:3.8.1-jdk-11 AS maven_build
 WORKDIR /app
-
-# 1. Copy pom and download dependencies
 COPY pom.xml .
 RUN mvn dependency:go-offline
-
-# 2. Copy source code and build the application
 COPY src ./src
-
-# ⭐️ FIX 1: Explicitly copy the PostgreSQL driver to a known location
-# This ensures the driver is available regardless of the version.
 RUN mvn dependency:copy-dependencies -DincludeArtifactIds=postgresql -DoutputDirectory=target/dependency
-
-# This creates /app/target/secretsanta.war (Package name)
 RUN mvn package -DskipTests 
 
-# Stage 2: Runtime Stage
-# Use a minimal Tomcat image for running the application
+# Stage 2: Runtime Stage (Changes here)
 FROM tomcat:9.0-jdk11-openjdk-slim
 
-# 1. Copy entrypoint script (must be done before USER switch)
-COPY entrypoint.sh /usr/local/tomcat/bin/
+# 1. ⭐️ NEW: Copy the setenv.sh file into Tomcat's bin directory
+COPY setenv.sh /usr/local/tomcat/bin/
 
-# 2. ⭐️ FIX 2: Copy the WAR file and RENAME it to ROOT.war
-# This ensures Tomcat deploys it as the default application, resolving 404/startup errors.
+# 2. Copy the WAR file and RENAME it to ROOT.war
 COPY --from=maven_build /app/target/secretsanta.war /usr/local/tomcat/webapps/ROOT.war
 
-# 3. ⭐️ FIX 3: Copy the PostgreSQL JDBC Driver from Maven Cache to Tomcat lib directory
+# 3. Copy the PostgreSQL JDBC Driver
 COPY --from=maven_build /app/target/dependency/postgresql-*.jar /usr/local/tomcat/lib/
 
 # 4. Grant execution rights (runs as default root user)
-RUN chmod +x /usr/local/tomcat/bin/entrypoint.sh 
+RUN chmod +x /usr/local/tomcat/bin/setenv.sh 
 
 # 5. Switch user for security
 USER tomcat 
 
-# 6. Set entrypoint and CMD
-ENTRYPOINT ["/usr/local/tomcat/bin/entrypoint.sh"]
+# 6. Set CMD to standard Tomcat startup (no ENTRYPOINT needed)
+# The base image already has the correct ENTRYPOINT/CMD for this.
+# We trust the base image's standard behavior now.
 
 EXPOSE 8080
-CMD [""]
+# Use the default image CMD which is usually ["catalina.sh", "run"]
+CMD ["catalina.sh", "run"]
