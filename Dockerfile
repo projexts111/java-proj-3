@@ -1,4 +1,5 @@
 # Stage 1: Build Stage
+# Build stage for compiling the Java application
 FROM maven:3.8.1-jdk-11 AS maven_build
 WORKDIR /app
 
@@ -9,34 +10,34 @@ RUN mvn dependency:go-offline
 # 2. Copy source code and build the application
 COPY src ./src
 
-# ⭐️ NEW STEP: Copy PostgreSQL driver to a known location in /app
-# We use the 'copy-dependencies' goal to place the driver in /app/target/dependency
-# The driver artifact is 'org.postgresql:postgresql:jar:...'
+# ⭐️ FIX 1: Explicitly copy the PostgreSQL driver to a known location
+# This ensures the driver is available regardless of the version.
 RUN mvn dependency:copy-dependencies -DincludeArtifactIds=postgresql -DoutputDirectory=target/dependency
 
-# This creates /app/target/secretsanta.war
+# This creates /app/target/secretsanta.war (Package name)
 RUN mvn package -DskipTests 
 
 # Stage 2: Runtime Stage
+# Use a minimal Tomcat image for running the application
 FROM tomcat:9.0-jdk11-openjdk-slim
 
-# 1. Copy entrypoint script
+# 1. Copy entrypoint script (must be done before USER switch)
 COPY entrypoint.sh /usr/local/tomcat/bin/
 
-# 2. Copy the WAR file
-COPY --from=maven_build /app/target/secretsanta.war /usr/local/tomcat/webapps/
+# 2. ⭐️ FIX 2: Copy the WAR file and RENAME it to ROOT.war
+# This ensures Tomcat deploys it as the default application, resolving 404/startup errors.
+COPY --from=maven_build /app/target/secretsanta.war /usr/local/tomcat/webapps/ROOT.war
 
-# ⭐️ UPDATED COPY: Copy the driver from the new known location /app/target/dependency
-# The wildcard (*) ensures we get the driver regardless of its version number.
+# 3. ⭐️ FIX 3: Copy the PostgreSQL JDBC Driver from Maven Cache to Tomcat lib directory
 COPY --from=maven_build /app/target/dependency/postgresql-*.jar /usr/local/tomcat/lib/
 
-# 3. Grant execution rights
+# 4. Grant execution rights (runs as default root user)
 RUN chmod +x /usr/local/tomcat/bin/entrypoint.sh 
 
-# 4. Switch user for security
+# 5. Switch user for security
 USER tomcat 
 
-# 5. Set entrypoint and CMD
+# 6. Set entrypoint and CMD
 ENTRYPOINT ["/usr/local/tomcat/bin/entrypoint.sh"]
 
 EXPOSE 8080
