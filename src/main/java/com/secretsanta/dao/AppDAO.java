@@ -56,6 +56,7 @@ public class AppDAO {
             
             String userInfo = dbUri.getUserInfo();
             if (userInfo == null) {
+                // URISyntaxException is now caught and wrapped internally
                 throw new URISyntaxException(dbUrl, "User info (username:password) is missing from the database URL.");
             }
             
@@ -74,6 +75,8 @@ public class AppDAO {
             return DriverManager.getConnection(jdbcUrl, fallbackUsername, fallbackPassword);
             
         } catch (URISyntaxException e) {
+            // CATCH: URISyntaxException is caught here and wrapped into a SQLException.
+            // This is why the Controller no longer needs to declare it.
             throw new SQLException("Database connection failed due to invalid URL format.", e);
         } catch (ClassNotFoundException e) {
             throw new SQLException("PostgreSQL driver not available. (Check Dockerfile COPY).", e);
@@ -84,7 +87,7 @@ public class AppDAO {
 
     /**
      * Saves the list of generated matches to the database in a single transaction.
-     * Method is updated to only throw SQLException (since URISyntaxException is now caught).
+     * The method only throws SQLException, as URISyntaxException is handled internally in getConnection().
      */
     public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
