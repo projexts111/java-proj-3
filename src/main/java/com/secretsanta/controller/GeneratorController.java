@@ -10,7 +10,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.net.URISyntaxException; 
+// REMOVED: import java.net.URISyntaxException; // This is no longer necessary
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -50,7 +50,7 @@ public class GeneratorController extends HttpServlet {
         try {
             matches = generateMatches(participants);
             
-            // This call can throw SQLException and URISyntaxException, which are caught below
+            // This call now only throws SQLException (URISyntaxException is handled in AppDAO)
             appDAO.saveMatches(1, matches); 
 
             // SUCCESS: Inform the user matches are stored, awaiting secure reveal link generation/distribution
@@ -62,14 +62,15 @@ public class GeneratorController extends HttpServlet {
             request.setAttribute("error", "Matching failed: " + e.getMessage() + " Please try again.");
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
         } catch (SQLException e) {
-            // Catches DB connection/transaction errors
+            // Catches DB connection/transaction errors and the wrapped URISyntaxException
             request.setAttribute("error", "A database error occurred during saving: " + e.getMessage());
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
-        } catch (URISyntaxException e) {
-             // Catches the error if the DATABASE_URL format is invalid
+        } 
+        // ❌ REMOVED THE FOLLOWING BLOCK TO FIX COMPILATION ERROR:
+        /* catch (URISyntaxException e) {
             request.setAttribute("error", "Configuration Error: The DATABASE_URL format is invalid. Check the environment variable format.");
             request.getRequestDispatcher("/WEB-INF/views/error.jsp").forward(request, response);
-        }
+        } */
     }
 
     /**
@@ -98,7 +99,7 @@ public class GeneratorController extends HttpServlet {
                     // CRITICAL FIX: Self-match on the LAST person
                     
                     if (i == 0) {
-                         throw new IllegalArgumentException("List size is 1 or less.");
+                        throw new IllegalArgumentException("List size is 1 or less.");
                     }
                     
                     // Swap the last recipient (i) with the previous one (i-1)
@@ -107,7 +108,7 @@ public class GeneratorController extends HttpServlet {
                     recipient = recipients.get(i);
                     
                     if (gifter.equals(recipient)) {
-                         throw new IllegalArgumentException("Self-match persists after final swap attempt.");
+                        throw new IllegalArgumentException("Self-match persists after final swap attempt.");
                     }
                 } else {
                     // Simple Fix: Self-match, but NOT the last person.
