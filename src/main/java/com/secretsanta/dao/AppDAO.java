@@ -23,8 +23,8 @@ public class AppDAO {
             // Build the JDBC URL from the separated components
             String jdbcUrl = "jdbc:postgresql://" + host + "/" + dbName;
             
-            // ⭐️ FINAL FIX: ADD sslfactory for cloud deployment stability
-            jdbcUrl += "?ssl=true&sslmode=require&sslfactory=org.postgresql.ssl.NonValidatingFactory";
+            // ⭐️ FINAL DEFINITIVE FIX: Use the full set of SSL parameters to bypass certification errors
+            jdbcUrl += "?ssl=true&sslmode=require&trustServerCertificate=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
             
             try {
                 Class.forName("org.postgresql.Driver");
@@ -58,8 +58,8 @@ public class AppDAO {
 
             String jdbcUrl = "jdbc:postgresql://" + fallbackHost + ":" + port + "/" + fallbackDbName;
             
-            // ⭐️ FINAL FIX: ADD sslfactory to the fallback logic too
-            jdbcUrl += "?ssl=true&sslmode=require&sslfactory=org.postgresql.ssl.NonValidatingFactory";
+            // ⭐️ FINAL DEFINITIVE FIX: Apply the same parameters to the fallback logic
+            jdbcUrl += "?ssl=true&sslmode=require&trustServerCertificate=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
             
             Class.forName("org.postgresql.Driver");
             return DriverManager.getConnection(jdbcUrl, fallbackUsername, fallbackPassword);
@@ -71,7 +71,7 @@ public class AppDAO {
         }
     }
     
-    // saveMatches method remains unchanged, as it only throws SQLException
+    // saveMatches method remains unchanged
     public void saveMatches(int groupId, List<MatchResult> matches) throws SQLException { 
         String sql = "INSERT INTO matches (group_id, gifter_name, recipient_name) VALUES (?, ?, ?)";
         
